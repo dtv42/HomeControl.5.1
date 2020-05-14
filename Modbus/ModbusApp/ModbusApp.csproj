@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net5.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>8.0</LangVersion>
+    <Version>1.0.0</Version>
+    <Authors>Dr. Peter Trimmel</Authors>
+    <Company />
+    <Description>Modbus console application.</Description>
+    <Copyright>Copyright (c) 2020 Dr. Peter Trimmel</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="appsettings.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Utilities\UtilityLib\UtilityLib.csproj" />
+    <ProjectReference Include="..\ModbusLib\ModbusLib.csproj" />
+  </ItemGroup>
+
+</Project>

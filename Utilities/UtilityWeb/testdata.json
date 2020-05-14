@@ -1,0 +1,11 @@
+{
+  "TestData": {
+    "Value": 43,
+    "Name": "NewData",
+    "Uuid": "{6DCEB058-526F-4413-8FCE-B60257A496A2}",
+    "Address": "10.0.1.77",
+    "Endpoint": "10.0.1.100:8080",
+    "Uri": "https://10.0.1.138:88",
+    "Code": "Accepted"
+  }
+}

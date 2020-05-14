@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>8.0</LangVersion>
+    <Version>1.0.0</Version>
+    <Authors>Dr. Peter Trimmel</Authors>
+    <Company />
+    <Description>Modbus library.</Description>
+    <Copyright>Copyright (c) 2020 Dr. Peter Trimmel</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NModbus" Version="3.0.61" />
+    <PackageReference Include="NModbus.Serial" Version="3.0.61" />
+    <PackageReference Include="System.IO.Ports" Version="4.7.0" />
+  </ItemGroup>
+
+</Project>
