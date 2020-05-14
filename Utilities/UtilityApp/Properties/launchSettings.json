@@ -1,7 +1,8 @@
 {
   "profiles": {
     "UtilityApp": {
-      "commandName": "Project"
+      "commandName": "Project",
+      "commandLineArgs": "validate -v 42 -o 1 -o 2"
     }
   }
 }

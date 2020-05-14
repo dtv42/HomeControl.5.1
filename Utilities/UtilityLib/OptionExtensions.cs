@@ -184,14 +184,15 @@ namespace UtilityLib
             return option;
         }
 
-        public static TOption Uri<TOption>(this TOption option, System.UriKind kind = System.UriKind.Absolute)
+        public static TOption Uri<TOption>(this TOption option, System.UriKind kind = System.UriKind.Absolute, bool httpOnly = true)
             where TOption : Option
         {
             option.Argument.AddValidator(r =>
             {
                 var value = r.GetValueOrDefault<string>();
-                if (System.Uri.TryCreate(value, kind, out _)) return null;
-                return $"{r.Symbol.Name} value is not a valid URI";
+                if (!System.Uri.TryCreate(value, kind, out System.Uri? uri)) return $"{r.Symbol.Name} value is not a valid URI";
+                if (httpOnly && ((uri.Scheme.ToLower() != "http") && (uri.Scheme.ToLower() != "https"))) return $"{r.Symbol.Name} schema value is not valid";
+                return null;
             });
 
             return option;

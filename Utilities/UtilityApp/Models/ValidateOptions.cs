@@ -8,6 +8,8 @@
 // <created>8-5-2020 08:36</created>
 // <author>Peter Trimmel</author>
 // --------------------------------------------------------------------------------------------------------------------
+using System;
+
 namespace UtilityApp.Models
 {
     /// <summary>

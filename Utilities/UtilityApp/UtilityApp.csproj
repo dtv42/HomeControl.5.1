@@ -27,16 +27,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\UtilityLib\UtilityLib.csproj" />
-    <ProjectReference Include="..\UtilityWeb\UtilityWeb.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Folder Include="Logs\" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Hosting" Version="2.2.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\UtilityLib\UtilityLib.csproj" />
   </ItemGroup>
 
 </Project>

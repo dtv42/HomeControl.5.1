@@ -42,7 +42,7 @@ namespace UtilityApp.Commands
             // Setup command options.
             AddOption(new Option<int> ("-d", "default value"            ).Name("Number").Default(1));
             AddOption(new Option<int> ("-v", "required value"           ).Name("Number").Required());
-            AddOption(new Option<int> ("-o", "only one value"           ).Name("Number").Arity(ArgumentArity.ExactlyOne));
+            AddOption(new Option<int> ("-o", "zero or one value"        ).Name("Number").Arity(ArgumentArity.ZeroOrOne));
             AddOption(new Option<int> ("-n", "number value"             ).Name("Number").FromAmong(1, 2, 3));
             AddOption(new Option<int> ("-r", "range value [0..10]"      ).Name("Number").Range(0, 10));
             AddOption(new Option<long>("-l", "range value [0, 10000000]").Name("Number").Range(0, 10000000L));
