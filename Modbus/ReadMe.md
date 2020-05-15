@@ -150,7 +150,7 @@ All commands have *-?* and *--help* options to display usage information.
 
 | Option | Description |
 | ------ | ----------- |
-| *--settings* | Shows the current settings (typically from "appsettings.json") |
+| *--verbose* | Shows the current settings (typically from "appsettings.json") |
 
 The root command options can also be used in the following sub commands.
 
