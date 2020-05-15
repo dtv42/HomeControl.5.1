@@ -12,64 +12,28 @@ namespace ModbusApp.Commands
 {
     #region Using Directives
 
-    using System.ComponentModel.DataAnnotations;
-    using System.Collections.Generic;
+    using System.CommandLine;
+    using System.CommandLine.IO;
+    using System.CommandLine.Invocation;
     using System.Text.Json;
 
-    using Microsoft.Extensions.Configuration;
-    using Microsoft.Extensions.Hosting;
     using Microsoft.Extensions.Logging;
 
-    using McMaster.Extensions.CommandLineUtils;
     using NModbus.Extensions;
 
     using UtilityLib;
     using ModbusLib;
     using ModbusLib.Models;
     using ModbusApp.Models;
+    using System.Collections.Generic;
 
     #endregion
 
-    [Command(Name = "write",
-             FullName = "NModbusApp TCP Write Command",
-             Description = "Supporting Modbus TCP write operations.",
-             ExtendedHelpText = "\nPlease specify the write option (coils or holding registers).")]
-    public class TcpWriteCommand : BaseCommand<TcpWriteCommand, AppSettings>
+    internal sealed class TcpWriteCommand : Command
     {
         #region Private Data Members
 
-        private readonly JsonSerializerOptions _options = JsonExtensions.DefaultSerializerOptions;
-        private readonly ITcpModbusClient _client;
-
-        #endregion
-
-        #region Private Properties
-
-        /// <summary>
-        /// This is a reference to the parent command <see cref="TcpCommand"/>.
-        /// </summary>
-        private TcpCommand? Parent { get; }
-
-        #endregion
-
-        #region Public Properties
-
-        [Required]
-        [Argument(0, Description = "Data values (JSON array format).")]
-        public string Values { get; } = "[]";
-
-        [Option("-c|--coil", Description = "Writes coil(s).")]
-        public bool OptionC { get; }
-
-        [Option("-h|--holding", Description = "Writes holding register(s).")]
-        public bool OptionH { get; }
-
-        [Option(Description = "The offset of the first item to write.")]
-        public ushort Offset { get; set; } = 0;
-
-        [Option(Description = "Writes the specified data type")]
-        [AllowedValues("bits", "string", "byte", "short", "ushort", "int", "uint", "float", "double", "long", "ulong", IgnoreCase = true)]
-        public (bool HasValue, string Value) Type { get; set; } = (false, string.Empty);
+        private readonly JsonSerializerOptions _jsonoptions = JsonExtensions.DefaultSerializerOptions;
 
         #endregion
 
@@ -77,371 +41,352 @@ namespace ModbusApp.Commands
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TcpWriteCommand"/> class.
-        /// Selected properties are initialized with data from the AppSettings instance.
         /// </summary>
         /// <param name="client"></param>
-        /// <param name="console"></param>
-        /// <param name="settings"></param>
-        /// <param name="config"></param>
-        /// <param name="environment"></param>
-        /// <param name="lifetime"></param>
         /// <param name="logger"></param>
-        /// <param name="application"></param>
         public TcpWriteCommand(ITcpModbusClient client,
-                               IConsole console,
-                               AppSettings settings,
-                               IConfiguration config,
-                               IHostEnvironment environment,
-                               IHostApplicationLifetime lifetime,
-                               ILogger<TcpWriteCommand> logger,
-                               CommandLineApplication application)
-            : base(console, settings, config, environment, lifetime, logger, application)
+                               ILogger<TcpWriteCommand> logger)
+            : base("write", "Supporting Modbus TCP write operations.")
         {
-            // Setting the TCP client instance.
-            _client = client;
-        }
+            // Setup command arguments and options.
+            AddArgument(new Argument<string>("Values", "Data values (JSON array format).").Default("[]"));
+            AddOption(new Option<bool>(new string[] { "-?", "--help" }, "Show help and usage information"));
+            AddOption(new Option<bool>(new string[] { "-c", "--coil" }, "Write coil(s)."));
+            AddOption(new Option<bool>(new string[] { "-h", "--holding" }, "Writes holding register(s)."));
+            AddOption(new Option<ushort>(new string[] { "-o", "--offset" }, "The offset of the first item.").Name("Offset").Default(0));
+            AddOption(new Option<string>(new string[] { "-t", "--type" }, "Reads the specified data type").Name("Type")
+                .FromAmong("bits", "string", "byte", "short", "ushort", "int", "uint", "float", "double", "long", "ulong"));
 
-        #endregion
-
-        #region Public Methods
-
-        /// <summary>
-        /// Runs when the commandline application command is executed.
-        /// </summary>
-        /// <returns>The exit code</returns>
-        public int OnExecute()
-        {
-            try
+            // Add custom validation.
+            AddValidator(r =>
             {
-                if (!(Parent is null))
+                if (r.Children.Contains("-?")) return "Specify a single write option (coils or holding registers).";
+
+                var optionC = r.Children.Contains("-c");
+                var optionH = r.Children.Contains("-h");
+                var optionN = r.Children.Contains("-n");
+                var optionO = r.Children.Contains("-o");
+                var optionT = r.Children.Contains("-t");
+
+                if ((!optionC && !optionH) || (optionC && optionH))
                 {
-                    // Overriding TCP client options.
-                    _client.TcpMaster.ReceiveTimeout = Parent.ReceiveTimeout;
-                    _client.TcpMaster.SendTimeout = Parent.SendTimeout;
-                    _client.TcpSlave.Address = Parent.Address;
-                    _client.TcpSlave.Port = Parent.Port;
-                    _client.TcpSlave.ID = Parent.SlaveID;
+                    return "Specify a single write option (coils or holding registers).";
                 }
 
-                if (Parent?.Parent?.ShowSettings ?? false)
+                return null;
+            });
+
+            // Setup execution handler.
+            Handler = CommandHandler.Create<IConsole, bool, TcpWriteCommandOptions>((console, verbose, options) =>
+            {
+                logger.LogInformation("Handler()");
+
+                // Run additional checks on options.
+                options.CheckOptions(console);
+
+                // Using TCP client options.
+                client.TcpSlave.Address = options.Address;
+                client.TcpSlave.Port = options.Port;
+                client.TcpSlave.ID = options.SlaveID;
+                client.TcpMaster.ReceiveTimeout = options.ReceiveTimeout;
+                client.TcpMaster.SendTimeout = options.SendTimeout;
+
+                if (verbose)
                 {
-                    _console.WriteLine(JsonSerializer.Serialize<TcpMasterData>(_settings.TcpMaster, _options));
-                    _console.WriteLine(JsonSerializer.Serialize<TcpSlaveData>(_settings.TcpSlave, _options));
+                    console.Out.WriteLine($"Modbus Commandline Application: {RootCommand.ExecutableName}");
+                    console.Out.WriteLine();
+                    console.Out.Write("TcpMasterData: ");
+                    console.Out.WriteLine(JsonSerializer.Serialize<TcpMasterData>(client.TcpMaster, _jsonoptions));
+                    console.Out.Write("TcpSlaveData: ");
+                    console.Out.WriteLine(JsonSerializer.Serialize<TcpSlaveData>(client.TcpSlave, _jsonoptions));
+                    console.Out.WriteLine();
                 }
 
-                if (_client.Connect())
+                try
                 {
-                    // Writing coils.
-                    if (OptionC)
+                    if (client.Connect())
                     {
-                        List<bool>? values = JsonSerializer.Deserialize<List<bool>>(Values);
-
-                        if (!(values is null))
+                        // Writing coils.
+                        if (options.Coil)
                         {
-                            if (values.Count == 0)
-                            {
-                                _logger.LogWarning($"No values specified.");
-                            }
-                            else
-                            {
-                                if (values.Count == 1)
-                                {
-                                    _console.WriteLine($"Write single coil[{Offset}] = {values[0]}");
-                                    _client.WriteSingleCoil(Offset, values[0]);
-                                }
-                                else
-                                {
-                                    _console.WriteLine($"Writing {values.Count} coils starting at {Offset}");
-
-                                    for (int index = 0; index < values.Count; ++index)
-                                        _console.WriteLine($"Value of coil[{Offset + index}] = {values[index]}");
-
-                                    _client.WriteMultipleCoils(Offset, values.ToArray());
-                                }
-                            }
-                        }
-                    }
-
-                    // Writing holding registers.
-                    if (OptionH)
-                    {
-                        if (Type.HasValue)
-                        {
-                            switch (Type.Value.ToLowerInvariant())
-                            {
-                                case "string":
-                                    {
-                                        _console.WriteLine($"Writing an ASCII string at offset = {Offset}");
-                                        _client.WriteString(Offset, Values);
-                                        break;
-                                    }
-                                case "bits":
-                                    {
-                                        _console.WriteLine($"Writing a 16 bit array at offset = {Offset}");
-                                        _client.WriteBits(Offset, Values.ToBitArray());
-                                        break;
-                                    }
-                                case "byte":
-                                    {
-                                        List<byte>? bytes = JsonSerializer.Deserialize<List<byte>>(Values);
-
-                                        if (!(bytes is null))
-                                        {
-                                            _console.WriteLine($"Writing {bytes.Count} bytes at offset = {Offset}");
-                                            _client.WriteBytes(Offset, bytes.ToArray());
-                                        }
-
-                                        break;
-                                    }
-                                case "short":
-                                    {
-                                        List<short>? values = JsonSerializer.Deserialize<List<short>>(Values);
-
-                                        if (!(values is null))
-                                        {
-                                            if (values.Count == 1)
-                                            {
-                                                _console.WriteLine($"Writing a single short value at offset = {Offset}");
-                                                _client.WriteShort(Offset, values[0]);
-                                            }
-                                            else
-                                            {
-                                                _console.WriteLine($"Writing {values.Count} short values at offset = {Offset}");
-                                                _client.WriteShortArray(Offset, values.ToArray());
-                                            }
-                                        }
-
-                                        break;
-                                    }
-                                case "ushort":
-                                    {
-                                        List<ushort>? values = JsonSerializer.Deserialize<List<ushort>>(Values);
-
-                                        if (!(values is null))
-                                        {
-                                            if (values.Count == 1)
-                                            {
-                                                _console.WriteLine($"Writing a single unsigned short value at offset = {Offset}");
-                                                _client.WriteUShort(Offset, values[0]);
-                                            }
-                                            else
-                                            {
-                                                _console.WriteLine($"Writing {values.Count} unsigned short values at offset = {Offset}");
-                                                _client.WriteUShortArray(Offset, values.ToArray());
-                                            }
-                                        }
-
-                                        break;
-                                    }
-                                case "int":
-                                    {
-                                        List<int>? values = JsonSerializer.Deserialize<List<int>>(Values);
-
-                                        if (!(values is null))
-                                        {
-                                            if (values.Count == 1)
-                                            {
-                                                _console.WriteLine($"Writing a single int value at offset = {Offset}");
-                                                _client.WriteInt32(Offset, values[0]);
-                                            }
-                                            else
-                                            {
-                                                _console.WriteLine($"Writing {values.Count} int values at offset = {Offset}");
-                                                _client.WriteInt32Array(Offset, values.ToArray());
-                                            }
-                                        }
-
-                                        break;
-                                    }
-                                case "uint":
-                                    {
-                                        List<uint>? values = JsonSerializer.Deserialize<List<uint>>(Values);
-
-                                        if (!(values is null))
-                                        {
-                                            if (values.Count == 1)
-                                            {
-                                                _console.WriteLine($"Writing a single unsigned int value at offset = {Offset}");
-                                                _client.WriteUInt32(Offset, values[0]);
-                                            }
-                                            else
-                                            {
-                                                _console.WriteLine($"Writing {values.Count} unsigned int values at offset = {Offset}");
-                                                _client.WriteUInt32Array(Offset, values.ToArray());
-                                            }
-                                        }
-
-                                        break;
-                                    }
-                                case "float":
-                                    {
-                                        List<float>? values = JsonSerializer.Deserialize<List<float>>(Values);
-
-                                        if (!(values is null))
-                                        {
-                                            if (values.Count == 1)
-                                            {
-                                                _console.WriteLine($"Writing a single float value at offset = {Offset}");
-                                                _client.WriteFloat(Offset, values[0]);
-                                            }
-                                            else
-                                            {
-                                                _console.WriteLine($"Writing {values.Count} float values at offset = {Offset}");
-                                                _client.WriteFloatArray(Offset, values.ToArray());
-                                            }
-                                        }
-
-                                        break;
-                                    }
-                                case "double":
-                                    {
-                                        List<double>? values = JsonSerializer.Deserialize<List<double>>(Values);
-
-                                        if (!(values is null))
-                                        {
-                                            if (values.Count == 1)
-                                            {
-                                                _console.WriteLine($"Writing a single double value at offset = {Offset}");
-                                                _client.WriteDouble(Offset, values[0]);
-                                            }
-                                            else
-                                            {
-                                                _console.WriteLine($"Writing {values.Count} double values at offset = {Offset}");
-                                                _client.WriteDoubleArray(Offset, values.ToArray());
-                                            }
-                                        }
-
-                                        break;
-                                    }
-                                case "long":
-                                    {
-                                        List<long>? values = JsonSerializer.Deserialize<List<long>>(Values);
-
-                                        if (!(values is null))
-                                        {
-                                            if (values.Count == 1)
-                                            {
-                                                _console.WriteLine($"Writing a single long value at offset = {Offset}");
-                                                _client.WriteLong(Offset, values[0]);
-                                            }
-                                            else
-                                            {
-                                                _console.WriteLine($"Writing {values.Count} long values at offset = {Offset}");
-                                                _client.WriteLongArray(Offset, values.ToArray());
-                                            }
-                                        }
-
-                                        break;
-                                    }
-                                case "ulong":
-                                    {
-                                        List<ulong>? values = JsonSerializer.Deserialize<List<ulong>>(Values);
-
-                                        if (!(values is null))
-                                        {
-                                            if (values.Count == 1)
-                                            {
-                                                _console.WriteLine($"Writing a single unsigned long value at offset = {Offset}");
-                                                _client.WriteULong(Offset, values[0]);
-                                            }
-                                            else
-                                            {
-                                                _console.WriteLine($"Writing {values.Count} unsigned long values at offset = {Offset}");
-                                                _client.WriteULongArray(Offset, values.ToArray());
-                                            }
-                                        }
-
-                                        break;
-                                    }
-                            }
-                        }
-                        else
-                        {
-                            List<ushort>? values = JsonSerializer.Deserialize<List<ushort>>(Values);
+                            List<bool>? values = JsonSerializer.Deserialize<List<bool>>(options.Values);
 
                             if (!(values is null))
                             {
                                 if (values.Count == 0)
                                 {
-                                    _logger.LogWarning($"No values specified.");
+                                    logger.LogWarning($"No values specified.");
                                 }
                                 else
                                 {
                                     if (values.Count == 1)
                                     {
-                                        _console.WriteLine($"Writing single holding register[{Offset}] = {values[0]}");
-                                        _client.WriteSingleRegister(Offset, values[0]);
+                                        console.Out.WriteLine($"Write single coil[{options.Offset}] = {values[0]}");
+                                        client.WriteSingleCoil(options.Offset, values[0]);
                                     }
                                     else
                                     {
-                                        _console.WriteLine($"Writing {values.Count} holding registers starting at {Offset}");
+                                        console.Out.WriteLine($"Writing {values.Count} coils starting at {options.Offset}");
 
                                         for (int index = 0; index < values.Count; ++index)
-                                            _console.WriteLine($"Value of holding register[{Offset + index}] = {values[index]}");
+                                            console.Out.WriteLine($"Value of coil[{options.Offset + index}] = {values[index]}");
 
-                                        _client.WriteMultipleRegisters(Offset, values.ToArray());
+                                        client.WriteMultipleCoils(options.Offset, values.ToArray());
+                                    }
+                                }
+                            }
+                        }
+
+                        // Writing holding registers.
+                        if (options.Holding)
+                        {
+                            if (!string.IsNullOrEmpty(options.Type))
+                            {
+                                switch (options.Type.ToLowerInvariant())
+                                {
+                                    case "string":
+                                        {
+                                            console.Out.WriteLine($"Writing an ASCII string at offset = {options.Offset}");
+                                            client.WriteString(options.Offset, options.Values);
+                                            break;
+                                        }
+                                    case "bits":
+                                        {
+                                            console.Out.WriteLine($"Writing a 16 bit array at offset = {options.Offset}");
+                                            client.WriteBits(options.Offset, options.Values.ToBitArray());
+                                            break;
+                                        }
+                                    case "byte":
+                                        {
+                                            List<byte>? bytes = JsonSerializer.Deserialize<List<byte>>(options.Values);
+
+                                            if (!(bytes is null))
+                                            {
+                                                console.Out.WriteLine($"Writing {bytes.Count} bytes at offset = {options.Offset}");
+                                                client.WriteBytes(options.Offset, bytes.ToArray());
+                                            }
+
+                                            break;
+                                        }
+                                    case "short":
+                                        {
+                                            List<short>? values = JsonSerializer.Deserialize<List<short>>(options.Values);
+
+                                            if (!(values is null))
+                                            {
+                                                if (values.Count == 1)
+                                                {
+                                                    console.Out.WriteLine($"Writing a single short value at offset = {options.Offset}");
+                                                    client.WriteShort(options.Offset, values[0]);
+                                                }
+                                                else
+                                                {
+                                                    console.Out.WriteLine($"Writing {values.Count} short values at offset = {options.Offset}");
+                                                    client.WriteShortArray(options.Offset, values.ToArray());
+                                                }
+                                            }
+
+                                            break;
+                                        }
+                                    case "ushort":
+                                        {
+                                            List<ushort>? values = JsonSerializer.Deserialize<List<ushort>>(options.Values);
+
+                                            if (!(values is null))
+                                            {
+                                                if (values.Count == 1)
+                                                {
+                                                    console.Out.WriteLine($"Writing a single unsigned short value at offset = {options.Offset}");
+                                                    client.WriteUShort(options.Offset, values[0]);
+                                                }
+                                                else
+                                                {
+                                                    console.Out.WriteLine($"Writing {values.Count} unsigned short values at offset = {options.Offset}");
+                                                    client.WriteUShortArray(options.Offset, values.ToArray());
+                                                }
+                                            }
+
+                                            break;
+                                        }
+                                    case "int":
+                                        {
+                                            List<int>? values = JsonSerializer.Deserialize<List<int>>(options.Values);
+
+                                            if (!(values is null))
+                                            {
+                                                if (values.Count == 1)
+                                                {
+                                                    console.Out.WriteLine($"Writing a single int value at offset = {options.Offset}");
+                                                    client.WriteInt32(options.Offset, values[0]);
+                                                }
+                                                else
+                                                {
+                                                    console.Out.WriteLine($"Writing {values.Count} int values at offset = {options.Offset}");
+                                                    client.WriteInt32Array(options.Offset, values.ToArray());
+                                                }
+                                            }
+
+                                            break;
+                                        }
+                                    case "uint":
+                                        {
+                                            List<uint>? values = JsonSerializer.Deserialize<List<uint>>(options.Values);
+
+                                            if (!(values is null))
+                                            {
+                                                if (values.Count == 1)
+                                                {
+                                                    console.Out.WriteLine($"Writing a single unsigned int value at offset = {options.Offset}");
+                                                    client.WriteUInt32(options.Offset, values[0]);
+                                                }
+                                                else
+                                                {
+                                                    console.Out.WriteLine($"Writing {values.Count} unsigned int values at offset = {options.Offset}");
+                                                    client.WriteUInt32Array(options.Offset, values.ToArray());
+                                                }
+                                            }
+
+                                            break;
+                                        }
+                                    case "float":
+                                        {
+                                            List<float>? values = JsonSerializer.Deserialize<List<float>>(options.Values);
+
+                                            if (!(values is null))
+                                            {
+                                                if (values.Count == 1)
+                                                {
+                                                    console.Out.WriteLine($"Writing a single float value at offset = {options.Offset}");
+                                                    client.WriteFloat(options.Offset, values[0]);
+                                                }
+                                                else
+                                                {
+                                                    console.Out.WriteLine($"Writing {values.Count} float values at offset = {options.Offset}");
+                                                    client.WriteFloatArray(options.Offset, values.ToArray());
+                                                }
+                                            }
+
+                                            break;
+                                        }
+                                    case "double":
+                                        {
+                                            List<double>? values = JsonSerializer.Deserialize<List<double>>(options.Values);
+
+                                            if (!(values is null))
+                                            {
+                                                if (values.Count == 1)
+                                                {
+                                                    console.Out.WriteLine($"Writing a single double value at offset = {options.Offset}");
+                                                    client.WriteDouble(options.Offset, values[0]);
+                                                }
+                                                else
+                                                {
+                                                    console.Out.WriteLine($"Writing {values.Count} double values at offset = {options.Offset}");
+                                                    client.WriteDoubleArray(options.Offset, values.ToArray());
+                                                }
+                                            }
+
+                                            break;
+                                        }
+                                    case "long":
+                                        {
+                                            List<long>? values = JsonSerializer.Deserialize<List<long>>(options.Values);
+
+                                            if (!(values is null))
+                                            {
+                                                if (values.Count == 1)
+                                                {
+                                                    console.Out.WriteLine($"Writing a single long value at offset = {options.Offset}");
+                                                    client.WriteLong(options.Offset, values[0]);
+                                                }
+                                                else
+                                                {
+                                                    console.Out.WriteLine($"Writing {values.Count} long values at offset = {options.Offset}");
+                                                    client.WriteLongArray(options.Offset, values.ToArray());
+                                                }
+                                            }
+
+                                            break;
+                                        }
+                                    case "ulong":
+                                        {
+                                            List<ulong>? values = JsonSerializer.Deserialize<List<ulong>>(options.Values);
+
+                                            if (!(values is null))
+                                            {
+                                                if (values.Count == 1)
+                                                {
+                                                    console.Out.WriteLine($"Writing a single unsigned long value at offset = {options.Offset}");
+                                                    client.WriteULong(options.Offset, values[0]);
+                                                }
+                                                else
+                                                {
+                                                    console.Out.WriteLine($"Writing {values.Count} unsigned long values at offset = {options.Offset}");
+                                                    client.WriteULongArray(options.Offset, values.ToArray());
+                                                }
+                                            }
+
+                                            break;
+                                        }
+                                }
+                            }
+                            else
+                            {
+                                List<ushort>? values = JsonSerializer.Deserialize<List<ushort>>(options.Values);
+
+                                if (!(values is null))
+                                {
+                                    if (values.Count == 0)
+                                    {
+                                        logger.LogWarning($"No values specified.");
+                                    }
+                                    else
+                                    {
+                                        if (values.Count == 1)
+                                        {
+                                            console.Out.WriteLine($"Writing single holding register[{options.Offset}] = {values[0]}");
+                                            client.WriteSingleRegister(options.Offset, values[0]);
+                                        }
+                                        else
+                                        {
+                                            console.Out.WriteLine($"Writing {values.Count} holding registers starting at {options.Offset}");
+
+                                            for (int index = 0; index < values.Count; ++index)
+                                                console.Out.WriteLine($"Value of holding register[{options.Offset + index}] = {values[index]}");
+
+                                            client.WriteMultipleRegisters(options.Offset, values.ToArray());
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                    else
+                    {
+                        console.Out.WriteLine($"Modbus TCP slave not found at {options.Address}:{options.Port}.");
+                        return ExitCodes.IncorrectFunction;
+                    }
                 }
-                else
+                catch (JsonException jex)
                 {
-                    _console.WriteLine($"Modbus TCP slave not found at {_client.TcpSlave.Address}:{_client.TcpSlave.Port}.");
-                    return ExitCodes.IncorrectFunction;
+                    logger.LogError(jex, $"Exception parsing JSON data values.");
+                    return ExitCodes.NotSuccessfullyCompleted;
                 }
-            }
-            catch (JsonException jex)
-            {
-                _logger.LogError(jex, $"Exception parsing JSON data values.");
-                return ExitCodes.NotSuccessfullyCompleted;
-            }
-            catch
-            {
-                _logger.LogError("TcpWriteCommand exception");
-                throw;
-            }
-            finally
-            {
-                if (_client.Connected)
+                catch
                 {
-                    _client.Disconnect();
+                    logger.LogError("TcpWriteCommand exception");
+                    throw;
                 }
-            }
-
-            return ExitCodes.SuccessfullyCompleted;
-        }
-
-        /// <summary>
-        /// Helper method to check options.
-        /// </summary>
-        /// <returns>True if options are OK.</returns>
-        public override bool CheckOptions()
-        {
-            if (Parent?.CheckOptions() ?? false)
-            {
-                if (!OptionC && !OptionH)
+                finally
                 {
-                    throw new CommandParsingException(_application, $"Specify the write option (coils or holding registers).");
+                    if (client.Connected)
+                    {
+                        client.Disconnect();
+                    }
                 }
 
-                if (OptionC && OptionH)
-                {
-                    throw new CommandParsingException(_application, $"Specify only a single write option (coils or holding registers).");
-                }
-
-                if (Type.HasValue && OptionC)
-                {
-                    _console.WriteLine($"Specified type '{Type.Value}' is ignored.");
-                }
-            }
-            else
-            {
-                return false;
-            }
-
-            return true;
+                return ExitCodes.SuccessfullyCompleted;
+            });
         }
 
         #endregion

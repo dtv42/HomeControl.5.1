@@ -5,7 +5,7 @@
 // <license>
 //   Licensed under the MIT license. See the LICENSE file in the project root for more information.
 // </license>
-// <created>8-5-2020 07:41</created>
+// <created>13-5-2020 19:38</created>
 // <author>Peter Trimmel</author>
 // --------------------------------------------------------------------------------------------------------------------
 namespace UtilityLib
@@ -104,6 +104,7 @@ namespace UtilityLib
             argument.AddValidator(r =>
             {
                 var value = r.GetValueOrDefault<string>();
+                if (value is null) return $"{r.Symbol.Name} value is null";
                 if (value.Length <= length) return null;
                 return $"{r.Symbol.Name} value length must be max. {length}";
             });
@@ -117,6 +118,7 @@ namespace UtilityLib
             argument.AddValidator(r =>
             {
                 var value = r.GetValueOrDefault<string>();
+                if (value is null) return $"{r.Symbol.Name} value is null";
                 if (!string.IsNullOrEmpty(value)) return null;
                 return $"{r.Symbol.Name} value must not be empty";
             });
@@ -130,6 +132,7 @@ namespace UtilityLib
             argument.AddValidator(r =>
             {
                 var value = r.GetValueOrDefault<string>();
+                if (value is null) return $"{r.Symbol.Name} value is null";
                 if (!string.IsNullOrWhiteSpace(value)) return null;
                 return $"{r.Symbol.Name} value must not be white space only";
             });
@@ -143,6 +146,7 @@ namespace UtilityLib
             argument.AddValidator(r =>
             {
                 var value = r.GetValueOrDefault<string>();
+                if (value is null) return $"{r.Symbol.Name} value is null";
                 var regex = new Regex(pattern);
                 if (regex.IsMatch(value)) return null;
                 return $"{r.Symbol.Name} value must match the regular expression: {pattern}";
@@ -156,7 +160,8 @@ namespace UtilityLib
         {
             argument.AddValidator(r =>
             {
-                var value = r.GetValueOrDefault<string>();               
+                var value = r.GetValueOrDefault<string>();
+                if (value is null) return $"{r.Symbol.Name} value is null";
                 if (System.Net.IPAddress.TryParse(value, out _)) return null;
                 return $"{r.Symbol.Name} value is not a valid IP address";
             });
@@ -170,6 +175,7 @@ namespace UtilityLib
             argument.AddValidator(r =>
             {
                 var value = r.GetValueOrDefault<string>();
+                if (value is null) return $"{r.Symbol.Name} value is null";
                 if (System.Net.IPEndPoint.TryParse(value, out _)) return null;
                 return $"{r.Symbol.Name} value is not a valid IP endpoint";
             });
@@ -183,6 +189,7 @@ namespace UtilityLib
             argument.AddValidator(r =>
             {
                 var value = r.GetValueOrDefault<string>();
+                if (value is null) return $"{r.Symbol.Name} value is null";
                 if (System.Uri.TryCreate(value, kind, out _)) return null;
                 return $"{r.Symbol.Name} value is not a valid URI";
             });

@@ -5,7 +5,7 @@
 // <license>
 //   Licensed under the MIT license. See the LICENSE file in the project root for more information.
 // </license>
-// <created>13-5-2020 09:11</created>
+// <created>13-5-2020 16:32</created>
 // <author>Peter Trimmel</author>
 // --------------------------------------------------------------------------------------------------------------------
 namespace UtilityLib
@@ -14,6 +14,7 @@ namespace UtilityLib
 
     using System.CommandLine;
     using System.CommandLine.Builder;
+    using System.CommandLine.Help;
     using System.CommandLine.Parsing;
 
     #endregion
@@ -68,8 +69,28 @@ namespace UtilityLib
         {
             return new CommandLineBuilder(_command)
                 .UseDefaults()
+                .UseHelpBuilder(context => new ExtendedHelpBinder(context.Console, "Copyright(c) 2020 Dr.Peter Trimmel - All rights reserved.\n"))
                 .Build()
                 ;
+        }
+
+        /// <summary>
+        ///  Helper class to extend the help text.
+        /// </summary>
+        private class ExtendedHelpBinder : HelpBuilder
+        {
+            private readonly string _extenedHelpText;
+
+            public ExtendedHelpBinder(IConsole console, string text) : base(console)
+            {
+                _extenedHelpText = text;
+            }
+
+            public override void Write(ICommand command)
+            {
+                base.Write(command);
+                base.Console.Out.Write(_extenedHelpText);
+            }
         }
     }
 }

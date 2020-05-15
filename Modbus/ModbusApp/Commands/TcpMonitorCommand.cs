@@ -14,81 +14,32 @@ namespace ModbusApp.Commands
 
     using System;
     using System.Collections;
+    using System.CommandLine;
+    using System.CommandLine.IO;
+    using System.CommandLine.Invocation;
+    using System.CommandLine.Parsing;
     using System.Globalization;
-    using System.Linq;
     using System.Text.Json;
-    using System.Threading;
-    using System.Threading.Tasks;
 
-    using Microsoft.Extensions.Configuration;
-    using Microsoft.Extensions.Hosting;
     using Microsoft.Extensions.Logging;
 
-    using McMaster.Extensions.CommandLineUtils;
     using NModbus.Extensions;
 
     using UtilityLib;
     using ModbusLib;
     using ModbusLib.Models;
     using ModbusApp.Models;
+    using System.Linq;
+    using System.Threading;
+    using System.Threading.Tasks;
 
     #endregion
 
-    [Command(Name = "monitor",
-             FullName = "ModbusApp TCP Monitor Command",
-             Description = "Supporting TCP monitor operations.",
-             ExtendedHelpText = "\nPlease specify the monitor option (coils, discrete inputs, holding registers, or input registers).")]
-    public class TcpMonitorCommand : BaseCommand<TcpMonitorCommand, AppSettings>
+    internal sealed class TcpMonitorCommand : Command
     {
         #region Private Data Members
 
-        private readonly JsonSerializerOptions _options = JsonExtensions.DefaultSerializerOptions;
-        private static readonly AutoResetEvent _closing = new AutoResetEvent(false);
-        private readonly ITcpModbusClient _client;
-
-        #endregion
-
-        #region Private Properties
-
-        /// <summary>
-        /// This is a reference to the parent command <see cref="TcpCommand"/>.
-        /// </summary>
-        private TcpCommand? Parent { get; }
-
-        #endregion
-
-        #region Public Properties
-
-        [Option("-c|--coil", Description = "Reads coil(s).")]
-        public bool OptionC { get; }
-
-        [Option("-d|--discrete", Description = "Reads discrete input(s).")]
-        public bool OptionD { get; }
-
-        [Option("-h|--holding", Description = "Reads holding register(s).")]
-        public bool OptionH { get; }
-
-        [Option("-i|--input", Description = "Reads input register(s).")]
-        public bool OptionI { get; }
-
-        [Option("-x|--hex", Description = "Displays the values in HEX.")]
-        public bool OptionX { get; }
-
-        [Option(Description = "The number of items to read.")]
-        public ushort Number { get; set; } = 1;
-
-        [Option(Description = "The offset of the first item to read.")]
-        public ushort Offset { get; set; } = 0;
-
-        [Option(Description = "Reads the specified data type")]
-        [AllowedValues("bits", "string", "byte", "short", "ushort", "int", "uint", "float", "double", "long", "ulong", IgnoreCase = true)]
-        public (bool HasValue, string Value) Type { get; set; } = (false, string.Empty);
-
-        [Option(Description = "The number of times to read (default: forever).")]
-        public uint Repeat { get; set; } = 0;
-
-        [Option(Description = "The seconds between times to read (default: 10).")]
-        public uint Seconds { get; set; } = 10;
+        private readonly JsonSerializerOptions _jsonoptions = JsonExtensions.DefaultSerializerOptions;
 
         #endregion
 
@@ -96,142 +47,152 @@ namespace ModbusApp.Commands
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TcpMonitorCommand"/> class.
-        /// Selected properties are initialized with data from the AppSettings instance.
         /// </summary>
         /// <param name="client"></param>
-        /// <param name="console"></param>
-        /// <param name="settings"></param>
-        /// <param name="config"></param>
-        /// <param name="environment"></param>
-        /// <param name="lifetime"></param>
         /// <param name="logger"></param>
-        /// <param name="application"></param>
         public TcpMonitorCommand(ITcpModbusClient client,
-                                 IConsole console,
-                                 AppSettings settings,
-                                 IConfiguration config,
-                                 IHostEnvironment environment,
-                                 IHostApplicationLifetime lifetime,
-                                 ILogger<TcpMonitorCommand> logger,
-                                 CommandLineApplication application)
-            : base(console, settings, config, environment, lifetime, logger, application)
+                                 ILogger<TcpMonitorCommand> logger)
+            : base("monitor", "Supporting TCP monitor operations.")
         {
-            // Setting the TCP client instance.
-            _client = client;
-        }
+            // Setup command options.
+            AddOption(new Option<bool>(new string[] { "-?", "--help" }, "Show help and usage information"));
+            AddOption(new Option<bool>(new string[] { "-c", "--coil" }, "Reads coil(s)"));
+            AddOption(new Option<bool>(new string[] { "-d", "--discrete" }, "Reads discrete input(s)"));
+            AddOption(new Option<bool>(new string[] { "-h", "--holding" }, "Reads holding register(s)"));
+            AddOption(new Option<bool>(new string[] { "-i", "--input" }, "Reads input register(s)"));
+            AddOption(new Option<bool>(new string[] { "-x", "--hex" }, "Displays the values in HEX"));
+            AddOption(new Option<ushort>(new string[] { "-n", "--number" }, "The number of items to read").Name("Number").Default(1));
+            AddOption(new Option<ushort>(new string[] { "-o", "--offset" }, "The offset of the first item").Name("Offset").Default(0));
+            AddOption(new Option<string>(new string[] { "-t", "--type" }, "Reads the specified data type").Name("Type")
+                .FromAmong("bits", "string", "byte", "short", "ushort", "int", "uint", "float", "double", "long", "ulong"));
+            AddOption(new Option<uint>(new string[] { "-r", "--repeat" }, "The number of times to read").Name("Repeat").Default(0));
+            AddOption(new Option<uint>(new string[] { "-s", "--seconds" }, "The seconds between read times").Name("Seconds").Default(10));
 
-        #endregion
-
-        #region Private Methods
-
-        /// <summary>
-        /// Runs when the commandline application command is executed.
-        /// </summary>
-        /// <returns>The exit code</returns>
-        private async Task<int> OnExecuteAsync(CancellationToken cancellationToken = default)
-        {
-            try
+            // Add custom validation.
+            AddValidator(r =>
             {
-                if (!(Parent is null))
+                if (r.Children.Contains("-?")) return "Specify a single read option (coils, discrete inputs, holding registers, input registers).";
+
+                var optionC = r.Children.Contains("-c");
+                var optionD = r.Children.Contains("-d");
+                var optionH = r.Children.Contains("-h");
+                var optionI = r.Children.Contains("-i");
+                var optionX = r.Children.Contains("-x");
+                var optionN = r.Children.Contains("-n");
+                var optionO = r.Children.Contains("-o");
+                var optionT = r.Children.Contains("-t");
+
+                if ((!optionC && !optionD && !optionH && !optionI) ||
+                    ((optionC && (optionD || optionH || optionI)) ||
+                     (optionD && (optionC || optionH || optionI)) ||
+                     (optionH && (optionD || optionC || optionI)) ||
+                     (optionI && (optionD || optionH || optionC))))
                 {
-                    // Overriding TCP client options.
-                    _client.TcpMaster.ReceiveTimeout = Parent.ReceiveTimeout;
-                    _client.TcpMaster.SendTimeout = Parent.SendTimeout;
-                    _client.TcpSlave.Address = Parent.Address;
-                    _client.TcpSlave.Port = Parent.Port;
-                    _client.TcpSlave.ID = Parent.SlaveID;
+                    return "Specify a single read option (coils, discrete inputs, holding registers, input registers).";
                 }
 
-                if (Parent?.Parent?.ShowSettings ?? false)
+                return null;
+            });
+
+            // Setup execution handler.
+            Handler = CommandHandler.Create<IConsole, CancellationToken, bool, TcpMonitorCommandOptions>(async (console, token, verbose, options) =>
+            {
+                logger.LogInformation("Handler()");
+
+                // Run additional checks on options.
+                options.CheckOptions(console);
+
+                // Using TCP client options.
+                client.TcpSlave.Address = options.Address;
+                client.TcpSlave.Port = options.Port;
+                client.TcpSlave.ID = options.SlaveID;
+                client.TcpMaster.ReceiveTimeout = options.ReceiveTimeout;
+                client.TcpMaster.SendTimeout = options.SendTimeout;
+
+                if (verbose)
                 {
-                    _console.WriteLine(JsonSerializer.Serialize<TcpMasterData>(_settings.TcpMaster, _options));
-                    _console.WriteLine(JsonSerializer.Serialize<TcpSlaveData>(_settings.TcpSlave, _options));
+                    console.Out.WriteLine($"Modbus Commandline Application: {RootCommand.ExecutableName}");
+                    console.Out.WriteLine();
+                    console.Out.Write("TcpMasterData: ");
+                    console.Out.WriteLine(JsonSerializer.Serialize<TcpMasterData>(client.TcpMaster, _jsonoptions));
+                    console.Out.Write("TcpSlaveData: ");
+                    console.Out.WriteLine(JsonSerializer.Serialize<TcpSlaveData>(client.TcpSlave, _jsonoptions));
+                    console.Out.WriteLine();
                 }
 
-                if (_client.Connect())
+                try
                 {
-                    try
+                    if (client.Connect())
                     {
-                        bool forever = (Repeat == 0);
-                        bool verbose = true;
-
-                        await Task.Factory.StartNew(async () =>
+                        try
                         {
-                            while (!cancellationToken.IsCancellationRequested)
+                            bool forever = (options.Repeat == 0);
+                            bool print = true;
+
+                            while (!token.IsCancellationRequested)
                             {
                                 // Read the specified data.
                                 var start = DateTime.UtcNow;
-                                ReadingData(verbose);
-                                // Only first call is verbose.
-                                verbose = false;
+#pragma warning disable CS8604 // Possible null reference argument (logger).
+                                ReadingData(client, console, logger, options, print);
+#pragma warning restore CS8604 // Possible null reference argument (logger).
+                                // Only first call is using verbose printing.
+                                print = false;
                                 var end = DateTime.UtcNow;
-                                double delay = ((Seconds * 1000.0) - (end - start).TotalMilliseconds) / 1000.0;
+                                double delay = ((options.Seconds * 1000.0) - (end - start).TotalMilliseconds) / 1000.0;
 
-                                if (Seconds > 0)
+                                if (options.Seconds > 0)
                                 {
                                     if (delay < 0)
                                     {
-                                        _logger?.LogWarning("Monitoring: no time between reads.");
+                                        logger?.LogWarning("Monitoring: no time between reads.");
                                     }
                                     else
                                     {
-                                        await Task.Delay(TimeSpan.FromSeconds(delay), cancellationToken);
+                                        await Task.Delay(TimeSpan.FromSeconds(delay), token);
                                     }
                                 }
 
-                                --Repeat;
-
-                                if (!forever && (--Repeat <= 0))
+                                if (!forever && (--options.Repeat <= 0))
                                 {
-                                    _closing.Set();
                                     break;
                                 }
                             }
-
-                        }, cancellationToken);
-
-                        _console.CancelKeyPress += new ConsoleCancelEventHandler((sender, args) =>
+                        }
+                        catch (AggregateException aex) when (aex.InnerExceptions.All(e => e is OperationCanceledException))
                         {
-                            _console.WriteLine("Monitoring cancelled.");
-                            _closing.Set();
-                        });
-
-                        _closing.WaitOne();
+                            console.Out.WriteLine("Monitoring cancelled.");
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            console.Out.WriteLine("Monitoring cancelled.");
+                        }
+                        catch
+                        {
+                            throw;
+                        }
                     }
-                    catch (AggregateException aex) when (aex.InnerExceptions.All(e => e is OperationCanceledException))
+                    else
                     {
-                        _console.WriteLine("Monitoring cancelled.");
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        _console.WriteLine("Monitoring cancelled.");
-                        throw;
-                    }
-                    catch
-                    {
-                        throw;
+                        console.Out.WriteLine($"Modbus TCP slave not found at {options.Address}:{options.Port}.");
+                        return ExitCodes.IncorrectFunction;
                     }
                 }
-                else
+                catch
                 {
-                    _console.WriteLine($"Modbus TCP slave not found at {_client.TcpSlave.Address}:{_client.TcpSlave.Port}.");
-                    return ExitCodes.IncorrectFunction;
+                    logger.LogError("TcpMonitorCommand exception");
+                    throw;
                 }
-            }
-            catch
-            {
-                _logger.LogError("TcpMonitorCommand exception");
-                throw;
-            }
-            finally
-            {
-                if (_client.Connected)
+                finally
                 {
-                    _client.Disconnect();
+                    if (client.Connected)
+                    {
+                        client.Disconnect();
+                    }
                 }
-            }
 
-            return ExitCodes.SuccessfullyCompleted;
+                return ExitCodes.SuccessfullyCompleted;
+            });
         }
 
         #endregion
@@ -241,550 +202,552 @@ namespace ModbusApp.Commands
         /// <summary>
         /// Reading the specified data.
         /// </summary>
-        private void ReadingData(bool verbose = false)
+        private void ReadingData(ITcpModbusClient client, IConsole console, ILogger<TcpMonitorCommand> logger, TcpMonitorCommandOptions options, bool print = false)
         {
+            logger?.LogDebug("TcpMonitor: Reading data...");
+
             // Reading coils.
-            if (OptionC)
+            if (options.Coil)
             {
-                if (Number == 1)
+                if (options.Number == 1)
                 {
-                    if (verbose) _console.WriteLine($"Monitoring a single coil[{Offset}]");
-                    bool[] values = _client.ReadCoils(Offset, Number);
-                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} Value of coil[{Offset}] = {values[0]}");
+                    if (print) console.Out.WriteLine($"Monitoring a single coil[{options.Offset}]");
+                    bool[] values = client.ReadCoils(options.Offset, options.Number);
+                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff} Value of coil[{options.Offset}] = {values[0]}");
                 }
                 else
                 {
-                    if (verbose) _console.WriteLine($"Monitoring {Number} coils starting at {Offset}");
-                    bool[] values = _client.ReadCoils(Offset, Number);
+                    if (print) console.Out.WriteLine($"Monitoring {options.Number} coils starting at {options.Offset}");
+                    bool[] values = client.ReadCoils(options.Offset, options.Number);
 
                     for (int index = 0; index < values.Length; ++index)
                     {
-                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of coil[{index}] = {values[index]}");
+                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of coil[{index}] = {values[index]}");
                     }
 
-                    _console.WriteLine();
+                    console.Out.WriteLine();
                 }
             }
 
             // Reading discrete inputs.
-            if (OptionD)
+            if (options.Discrete)
             {
-                if (Number == 1)
+                if (options.Number == 1)
                 {
-                    if (verbose) _console.WriteLine($"Monitoring a discrete input[{Offset}]");
-                    bool[] values = _client.ReadInputs(Offset, Number);
-                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of discrete input[{Offset}] = {values[0]}");
+                    if (print) console.Out.WriteLine($"Monitoring a discrete input[{options.Offset}]");
+                    bool[] values = client.ReadInputs(options.Offset, options.Number);
+                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of discrete input[{options.Offset}] = {values[0]}");
                 }
                 else
                 {
-                    if (verbose) _console.WriteLine($"Monitoring {Number} discrete inputs starting at {Offset}");
-                    bool[] values = _client.ReadInputs(Offset, Number);
+                    if (print) console.Out.WriteLine($"Monitoring {options.Number} discrete inputs starting at {options.Offset}");
+                    bool[] values = client.ReadInputs(options.Offset, options.Number);
 
                     for (int index = 0; index < values.Length; ++index)
                     {
-                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of discrete input[{index}] = {values[index]}");
+                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of discrete input[{index}] = {values[index]}");
                     }
 
-                    _console.WriteLine();
+                    console.Out.WriteLine();
                 }
             }
 
             // Reading holding registers.
-            if (OptionH)
+            if (options.Holding)
             {
-                if (Type.HasValue)
+                if (!string.IsNullOrEmpty(options.Type))
                 {
-                    switch (Type.Value.ToLowerInvariant())
+                    switch (options.Type.ToLowerInvariant())
                     {
                         case "string":
                             {
-                                if (OptionX)
+                                if (options.Hex)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a HEX string from offset = {Offset}");
-                                    string value = _client.ReadHexString(Offset, Number);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of HEX string = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a HEX string from offset = {options.Offset}");
+                                    string value = client.ReadHexString(options.Offset, options.Number);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of HEX string = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring an ASCII string from offset = {Offset}");
-                                    string value = _client.ReadString(Offset, Number);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of ASCII string = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring an ASCII string from offset = {options.Offset}");
+                                    string value = client.ReadString(options.Offset, options.Number);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of ASCII string = {value}");
                                 }
 
                                 break;
                             }
                         case "bits":
                             {
-                                if (verbose) _console.WriteLine($"Monitoring a 16 bit array from offset = {Offset}");
-                                BitArray value = _client.ReadBits(Offset);
-                                _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of 16 bit array = {value.ToDigitString()}");
+                                if (print) console.Out.WriteLine($"Monitoring a 16 bit array from offset = {options.Offset}");
+                                BitArray value = client.ReadBits(options.Offset);
+                                console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of 16 bit array = {value.ToDigitString()}");
                                 break;
                             }
                         case "byte":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single byte from offset = {Offset}");
-                                    byte[] values = _client.ReadBytes(Offset, Number);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single byte = {values[0]}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single byte from offset = {options.Offset}");
+                                    byte[] values = client.ReadBytes(options.Offset, options.Number);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single byte = {values[0]}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} bytes from offset = {Offset}");
-                                    byte[] values = _client.ReadBytes(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} bytes from offset = {options.Offset}");
+                                    byte[] values = client.ReadBytes(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of byte array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of byte array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                         case "short":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single short from offset = {Offset}");
-                                    short value = _client.ReadShort(Offset);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single short = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single short from offset = {options.Offset}");
+                                    short value = client.ReadShort(options.Offset);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single short = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} shorts from offset = {Offset}");
-                                    short[] values = _client.ReadShortArray(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} shorts from offset = {options.Offset}");
+                                    short[] values = client.ReadShortArray(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of short array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of short array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                         case "ushort":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single ushort from offset = {Offset}");
-                                    ushort value = _client.ReadUShort(Offset);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single ushort = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single ushort from offset = {options.Offset}");
+                                    ushort value = client.ReadUShort(options.Offset);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single ushort = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} ushorts from offset = {Offset}");
-                                    ushort[] values = _client.ReadUShortArray(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} ushorts from offset = {options.Offset}");
+                                    ushort[] values = client.ReadUShortArray(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of ushort array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of ushort array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                         case "int":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single integer from offset = {Offset}");
-                                    Int32 value = _client.ReadInt32(Offset);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single integer = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single integer from offset = {options.Offset}");
+                                    Int32 value = client.ReadInt32(options.Offset);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single integer = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number}  integers from offset = {Offset}");
-                                    Int32[] values = _client.ReadInt32Array(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number}  integers from offset = {options.Offset}");
+                                    Int32[] values = client.ReadInt32Array(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of integer array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of integer array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                         case "uint":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single unsigned integer from offset = {Offset}");
-                                    UInt32 value = _client.ReadUInt32(Offset);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single unsigned integer = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single unsigned integer from offset = {options.Offset}");
+                                    UInt32 value = client.ReadUInt32(options.Offset);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single unsigned integer = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} unsigned integers from offset = {Offset}");
-                                    UInt32[] values = _client.ReadUInt32Array(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} unsigned integers from offset = {options.Offset}");
+                                    UInt32[] values = client.ReadUInt32Array(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of unsigned integer array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of unsigned integer array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                         case "float":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single float from offset = {Offset}");
-                                    float value = _client.ReadFloat(Offset);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single float = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single float from offset = {options.Offset}");
+                                    float value = client.ReadFloat(options.Offset);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single float = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} floats from offset = {Offset}");
-                                    float[] values = _client.ReadFloatArray(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} floats from offset = {options.Offset}");
+                                    float[] values = client.ReadFloatArray(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of float array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of float array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                         case "double":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single double from offset = {Offset}");
-                                    double value = _client.ReadDouble(Offset);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single double = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single double from offset = {options.Offset}");
+                                    double value = client.ReadDouble(options.Offset);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single double = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} doubles from offset = {Offset}");
-                                    double[] values = _client.ReadDoubleArray(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} doubles from offset = {options.Offset}");
+                                    double[] values = client.ReadDoubleArray(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of double array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of double array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                         case "long":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single long from offset = {Offset}");
-                                    long value = _client.ReadLong(Offset);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single long = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single long from offset = {options.Offset}");
+                                    long value = client.ReadLong(options.Offset);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single long = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} longs from offset = {Offset}");
-                                    long[] values = _client.ReadLongArray(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} longs from offset = {options.Offset}");
+                                    long[] values = client.ReadLongArray(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of long array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of long array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                         case "ulong":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single ulong from offset = {Offset}");
-                                    ulong value = _client.ReadULong(Offset);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single ulong = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single ulong from offset = {options.Offset}");
+                                    ulong value = client.ReadULong(options.Offset);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single ulong = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} ulongs from offset = {Offset}");
-                                    ulong[] values = _client.ReadULongArray(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} ulongs from offset = {options.Offset}");
+                                    ulong[] values = client.ReadULongArray(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of ulong array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of ulong array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                     }
                 }
-                else if (Number == 1)
+                else if (options.Number == 1)
                 {
-                    if (verbose) _console.WriteLine($"Monitoring a holding register[{Offset}]");
-                    ushort[] values = _client.ReadHoldingRegisters(Offset, Number);
-                    if (OptionX) _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of holding register[{Offset}] = {values[0]:X2}");
-                    else _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of holding register[{Offset}] = {values[0]}");
+                    if (print) console.Out.WriteLine($"Monitoring a holding register[{options.Offset}]");
+                    ushort[] values = client.ReadHoldingRegisters(options.Offset, options.Number);
+                    if (options.Hex) console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of holding register[{options.Offset}] = {values[0]:X2}");
+                    else console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of holding register[{options.Offset}] = {values[0]}");
                 }
                 else
                 {
-                    if (verbose) _console.WriteLine($"Monitoring {Number} holding registers starting at {Offset}");
-                    ushort[] values = _client.ReadHoldingRegisters(Offset, Number);
+                    if (print) console.Out.WriteLine($"Monitoring {options.Number} holding registers starting at {options.Offset}");
+                    ushort[] values = client.ReadHoldingRegisters(options.Offset, options.Number);
 
                     for (int index = 0; index < values.Length; ++index)
                     {
-                        if (OptionX) _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of holding register[{index}] = {values[index]:X2}");
-                        else _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of holding register[{index}] = {values[index]}");
+                        if (options.Hex) console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of holding register[{index}] = {values[index]:X2}");
+                        else console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of holding register[{index}] = {values[index]}");
                     }
 
-                    _console.WriteLine();
+                    console.Out.WriteLine();
                 }
             }
 
             // Reading input registers.
-            if (OptionI)
+            if (options.Input)
             {
-                if (Type.HasValue)
+                if (!string.IsNullOrEmpty(options.Type))
                 {
-                    switch (Type.Value.ToLowerInvariant())
+                    switch (options.Type.ToLowerInvariant())
                     {
                         case "string":
                             {
-                                if (OptionX)
+                                if (options.Hex)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a HEX string from offset = {Offset}");
-                                    string value = _client.ReadOnlyHexString(Offset, Number);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of HEX string = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a HEX string from offset = {options.Offset}");
+                                    string value = client.ReadOnlyHexString(options.Offset, options.Number);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of HEX string = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring an ASCII string from offset = {Offset}");
-                                    string value = _client.ReadOnlyString(Offset, Number);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of ASCII string = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring an ASCII string from offset = {options.Offset}");
+                                    string value = client.ReadOnlyString(options.Offset, options.Number);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of ASCII string = {value}");
                                 }
 
                                 break;
                             }
                         case "bits":
                             {
-                                if (verbose) _console.WriteLine($"Monitoring a 16 bit array from offset = {Offset}");
-                                BitArray value = _client.ReadOnlyBits(Offset);
-                                _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of 16 bit array = {value.ToDigitString()}");
+                                if (print) console.Out.WriteLine($"Monitoring a 16 bit array from offset = {options.Offset}");
+                                BitArray value = client.ReadOnlyBits(options.Offset);
+                                console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of 16 bit array = {value.ToDigitString()}");
                                 break;
                             }
                         case "byte":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single byte from offset = {Offset}");
-                                    byte[] values = _client.ReadOnlyBytes(Offset, Number);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single byte = {values[0]}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single byte from offset = {options.Offset}");
+                                    byte[] values = client.ReadOnlyBytes(options.Offset, options.Number);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single byte = {values[0]}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} bytes from offset = {Offset}");
-                                    byte[] values = _client.ReadOnlyBytes(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} bytes from offset = {options.Offset}");
+                                    byte[] values = client.ReadOnlyBytes(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of byte array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of byte array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                         case "short":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single short from offset = {Offset}");
-                                    short value = _client.ReadOnlyShort(Offset);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single short = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single short from offset = {options.Offset}");
+                                    short value = client.ReadOnlyShort(options.Offset);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single short = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} short values from offset = {Offset}");
-                                    short[] values = _client.ReadOnlyShortArray(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} short values from offset = {options.Offset}");
+                                    short[] values = client.ReadOnlyShortArray(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of short array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of short array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                         case "ushort":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single ushort from offset = {Offset}");
-                                    ushort value = _client.ReadOnlyUShort(Offset);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single ushort = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single ushort from offset = {options.Offset}");
+                                    ushort value = client.ReadOnlyUShort(options.Offset);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single ushort = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} ushort values from offset = {Offset}");
-                                    ushort[] values = _client.ReadOnlyUShortArray(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} ushort values from offset = {options.Offset}");
+                                    ushort[] values = client.ReadOnlyUShortArray(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of ushort array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of ushort array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                         case "int":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single int from offset = {Offset}");
-                                    Int32 value = _client.ReadOnlyInt32(Offset);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single integer = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single int from offset = {options.Offset}");
+                                    Int32 value = client.ReadOnlyInt32(options.Offset);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single integer = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} int values from offset = {Offset}");
-                                    Int32[] values = _client.ReadOnlyInt32Array(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} int values from offset = {options.Offset}");
+                                    Int32[] values = client.ReadOnlyInt32Array(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of int array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of int array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                         case "uint":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single unsigned int from offset = {Offset}");
-                                    UInt32 value = _client.ReadOnlyUInt32(Offset);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single unsigned int = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single unsigned int from offset = {options.Offset}");
+                                    UInt32 value = client.ReadOnlyUInt32(options.Offset);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single unsigned int = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} unsigned int values from offset = {Offset}");
-                                    UInt32[] values = _client.ReadOnlyUInt32Array(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} unsigned int values from offset = {options.Offset}");
+                                    UInt32[] values = client.ReadOnlyUInt32Array(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of unsigned int array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of unsigned int array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                         case "float":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single float from offset = {Offset}");
-                                    float value = _client.ReadOnlyFloat(Offset);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single float = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single float from offset = {options.Offset}");
+                                    float value = client.ReadOnlyFloat(options.Offset);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single float = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} float values from offset = {Offset}");
-                                    float[] values = _client.ReadOnlyFloatArray(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} float values from offset = {options.Offset}");
+                                    float[] values = client.ReadOnlyFloatArray(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of float array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of float array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                         case "double":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single double from offset = {Offset}");
-                                    double value = _client.ReadOnlyDouble(Offset);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single double = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single double from offset = {options.Offset}");
+                                    double value = client.ReadOnlyDouble(options.Offset);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single double = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} double values from offset = {Offset}");
-                                    double[] values = _client.ReadOnlyDoubleArray(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} double values from offset = {options.Offset}");
+                                    double[] values = client.ReadOnlyDoubleArray(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of double array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of double array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                         case "long":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single long from offset = {Offset}");
-                                    long value = _client.ReadOnlyLong(Offset);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single long = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single long from offset = {options.Offset}");
+                                    long value = client.ReadOnlyLong(options.Offset);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single long = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} long values from offset = {Offset}");
-                                    long[] values = _client.ReadOnlyLongArray(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} long values from offset = {options.Offset}");
+                                    long[] values = client.ReadOnlyLongArray(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of long array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of long array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
                             }
                         case "ulong":
                             {
-                                if (Number == 1)
+                                if (options.Number == 1)
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring a single unsigned long from offset = {Offset}");
-                                    ulong value = _client.ReadOnlyULong(Offset);
-                                    _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single ulong = {value}");
+                                    if (print) console.Out.WriteLine($"Monitoring a single unsigned long from offset = {options.Offset}");
+                                    ulong value = client.ReadOnlyULong(options.Offset);
+                                    console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of single ulong = {value}");
                                 }
                                 else
                                 {
-                                    if (verbose) _console.WriteLine($"Monitoring {Number} unsigned long values from offset = {Offset}");
-                                    ulong[] values = _client.ReadOnlyULongArray(Offset, Number);
+                                    if (print) console.Out.WriteLine($"Monitoring {options.Number} unsigned long values from offset = {options.Offset}");
+                                    ulong[] values = client.ReadOnlyULongArray(options.Offset, options.Number);
 
                                     for (int index = 0; index < values.Length; ++index)
                                     {
-                                        _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of ulong array[{index}] = {values[index]}");
+                                        console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of ulong array[{index}] = {values[index]}");
                                     }
 
-                                    _console.WriteLine();
+                                    console.Out.WriteLine();
                                 }
 
                                 break;
@@ -793,106 +756,28 @@ namespace ModbusApp.Commands
                 }
                 else
                 {
-                    if (Number == 1)
+                    if (options.Number == 1)
                     {
-                        if (verbose) _console.WriteLine($"Monitoring a input register[{Offset}]");
-                        ushort[] values = _client.ReadInputRegisters(Offset, Number);
-                        if (OptionX) _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of input register[{Offset}] = {values[0]:X2}");
-                        else _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of input register[{Offset}] = {values[0]}");
+                        if (print) console.Out.WriteLine($"Monitoring a input register[{options.Offset}]");
+                        ushort[] values = client.ReadInputRegisters(options.Offset, options.Number);
+                        if (options.Hex) console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of input register[{options.Offset}] = {values[0]:X2}");
+                        else console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of input register[{options.Offset}] = {values[0]}");
                     }
                     else
                     {
-                        if (verbose) _console.WriteLine($"Monitoring {Number} input registers starting at {Offset}");
-                        ushort[] values = _client.ReadInputRegisters(Offset, Number);
+                        if (print) console.Out.WriteLine($"Monitoring {options.Number} input registers starting at {options.Offset}");
+                        ushort[] values = client.ReadInputRegisters(options.Offset, options.Number);
 
                         for (int index = 0; index < values.Length; ++index)
                         {
-                            if (OptionX) _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of input register[{index}] = {values[index]:X2}");
-                            else _console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of input register[{index}] = {values[index]}");
+                            if (options.Hex) console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of input register[{index}] = {values[index]:X2}");
+                            else console.Out.WriteLine($"{DateTime.Now:HH:mm:ss.fff}: Value of input register[{index}] = {values[index]}");
                         }
 
-                        _console.WriteLine();
+                        console.Out.WriteLine();
                     }
                 }
             }
-        }
-
-        #endregion
-
-        #region Public Methods
-
-        /// <summary>
-        /// Helper method to check options.
-        /// </summary>
-        /// <returns>True if options are OK.</returns>
-        public override bool CheckOptions()
-        {
-            if (Parent?.CheckOptions() ?? false)
-            {
-                if (!OptionC && !OptionD && !OptionH && !OptionI)
-                {
-                    throw new CommandParsingException(_application, $"Specify the read option (coils, discrete inputs, holding registers, input registers).");
-                }
-
-                if ((OptionC && (OptionD || OptionH || OptionI)) ||
-                    (OptionD && (OptionC || OptionH || OptionI)) ||
-                    (OptionH && (OptionD || OptionC || OptionI)) ||
-                    (OptionI && (OptionD || OptionH || OptionC)))
-                {
-                    throw new CommandParsingException(_application, $"Specify only a single read option (coils, discrete inputs, holding registers, input register).");
-                }
-
-                if ((OptionC || OptionD) && OptionX)
-                {
-                    _console.WriteLine($"HEX output option is ignored.");
-                }
-
-                if (Type.HasValue)
-                {
-                    if (OptionI || OptionH)
-                    {
-                        switch (Type.Value.ToLower(CultureInfo.CurrentCulture))
-                        {
-                            case "bits":
-                                if (Number > 1)
-                                {
-                                    _console.WriteLine($"Only a single bit array value is supported (Number == 1).");
-                                    Number = 1;
-                                }
-                                break;
-                            case "string":
-                                break;
-                            case "byte":
-                            case "short":
-                            case "ushort":
-                            case "int":
-                            case "uint":
-                            case "float":
-                            case "double":
-                            case "long":
-                            case "ulong":
-                                if (OptionX)
-                                {
-                                    _console.WriteLine($"HEX output option is ignored.");
-                                }
-
-                                break;
-                            default:
-                                throw new CommandParsingException(_application, $"Unsupported data type '{Type}'.");
-                        }
-                    }
-                    else if (OptionC || OptionD)
-                    {
-                        _console.WriteLine($"Specified type '{Type.Value}' is ignored.");
-                    }
-                }
-            }
-            else
-            {
-                return false;
-            }
-
-            return true;
         }
 
         #endregion

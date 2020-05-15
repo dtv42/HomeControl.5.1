@@ -27,4 +27,8 @@
     <ProjectReference Include="..\ModbusLib\ModbusLib.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Logs\" />
+  </ItemGroup>
+
 </Project>

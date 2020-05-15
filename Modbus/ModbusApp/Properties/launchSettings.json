@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ModbusApp": {
+      "commandName": "Project",
+      "commandLineArgs": "rtu monitor -c"
+    }
+  }
+}

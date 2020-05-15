@@ -5,15 +5,17 @@
 // <license>
 //   Licensed under the MIT license. See the LICENSE file in the project root for more information.
 // </license>
-// <created>8-5-2020 07:41</created>
+// <created>13-5-2020 16:32</created>
 // <author>Peter Trimmel</author>
 // --------------------------------------------------------------------------------------------------------------------
 namespace UtilityLib
 {
     #region Using Directives
 
+    using System;
     using System.CommandLine;
     using System.CommandLine.Parsing;
+    using System.Globalization;
     using System.Linq;
     using System.Text.RegularExpressions;
 
@@ -111,6 +113,7 @@ namespace UtilityLib
             option.Argument.AddValidator(r =>
             {
                 var value = r.GetValueOrDefault<string>();
+                if (value is null) return $"{r.Symbol.Name} value is null";
                 if (value.Length <= length) return null;
                 return $"{r.Symbol.Name} value length must be max. {length}";
             });
@@ -124,6 +127,7 @@ namespace UtilityLib
             option.Argument.AddValidator(r =>
             {
                 var value = r.GetValueOrDefault<string>();
+                if (value is null) return $"{r.Symbol.Name} value is null";
                 if (!string.IsNullOrEmpty(value)) return null;
                 return $"{r.Symbol.Name} value must not be empty";
             });
@@ -137,6 +141,7 @@ namespace UtilityLib
             option.Argument.AddValidator(r =>
             {
                 var value = r.GetValueOrDefault<string>();
+                if (value is null) return $"{r.Symbol.Name} value is null";
                 if (!string.IsNullOrWhiteSpace(value)) return null;
                 return $"{r.Symbol.Name} value must not be white space only";
             });
@@ -150,6 +155,7 @@ namespace UtilityLib
             option.Argument.AddValidator(r =>
             {
                 var value = r.GetValueOrDefault<string>();
+                if (value is null) return $"{r.Symbol.Name} value is null";
                 var regex = new Regex(pattern);
                 if (regex.IsMatch(value)) return null;
                 return $"{r.Symbol.Name} value must match the regular expression: {pattern}";
@@ -163,7 +169,8 @@ namespace UtilityLib
         {
             option.Argument.AddValidator(r =>
             {
-                var value = r.GetValueOrDefault<string>();               
+                var value = r.GetValueOrDefault<string>();
+                if (value is null) return $"{r.Symbol.Name} value is null";
                 if (System.Net.IPAddress.TryParse(value, out _)) return null;
                 return $"{r.Symbol.Name} value is not a valid IP address";
             });
@@ -177,6 +184,7 @@ namespace UtilityLib
             option.Argument.AddValidator(r =>
             {
                 var value = r.GetValueOrDefault<string>();
+                if (value is null) return $"{r.Symbol.Name} value is null";
                 if (System.Net.IPEndPoint.TryParse(value, out _)) return null;
                 return $"{r.Symbol.Name} value is not a valid IP endpoint";
             });
@@ -190,6 +198,7 @@ namespace UtilityLib
             option.Argument.AddValidator(r =>
             {
                 var value = r.GetValueOrDefault<string>();
+                if (value is null) return $"{r.Symbol.Name} value is null";
                 if (!System.Uri.TryCreate(value, kind, out System.Uri? uri)) return $"{r.Symbol.Name} value is not a valid URI";
                 if (httpOnly && ((uri.Scheme.ToLower() != "http") && (uri.Scheme.ToLower() != "https"))) return $"{r.Symbol.Name} schema value is not valid";
                 return null;

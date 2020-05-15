@@ -13,15 +13,12 @@ namespace ModbusApp.Commands
     #region Using Directives
 
     using System;
-    using System.ComponentModel.DataAnnotations;
-    using System.Net;
+    using System.CommandLine;
+    using System.CommandLine.IO;
+    using System.CommandLine.Invocation;
     using System.Text.Json;
 
-    using Microsoft.Extensions.Configuration;
-    using Microsoft.Extensions.Hosting;
     using Microsoft.Extensions.Logging;
-
-    using McMaster.Extensions.CommandLineUtils;
 
     using UtilityLib;
     using ModbusLib;
@@ -33,45 +30,11 @@ namespace ModbusApp.Commands
     /// <summary>
     /// This class implements the TCP command.
     /// </summary>
-    [Command(Name = "tcp",
-             FullName = "NModbusApp TCP Command",
-             Description = "Subcommand supporting standard Modbus TCP operations.",
-             ExtendedHelpText = "\nCopyright (c) 2020 Dr. Peter Trimmel - All rights reserved.")]
-    [Subcommand(typeof(TcpReadCommand))]
-    [Subcommand(typeof(TcpWriteCommand))]
-    [Subcommand(typeof(TcpMonitorCommand))]
-    public class TcpCommand : BaseCommand<TcpCommand, AppSettings>
+    internal sealed class TcpCommand : Command
     {
         #region Private Data Members
 
-        private readonly JsonSerializerOptions _options = JsonExtensions.DefaultSerializerOptions;
-        private readonly ITcpModbusClient _client;
-
-        #endregion
-
-        #region Public Properties
-
-        /// <summary>
-        /// This is a reference to the parent command <see cref="RootCommand"/>.
-        /// </summary>
-        public RootCommand? Parent { get; }
-
-        [Option("--address <IP>", Description = "Sets the Modbus slave IP address.", Inherited = true)]
-        [IPAddress]
-        public string Address { get; } = string.Empty;
-
-        [Option("--port <NUMBER>", Description = "Sets the Modbus slave port number.", Inherited = true)]
-        [Range(1, 65535)]
-        public int Port { get; }
-
-        [Option("--slaveid <NUMBER>", Description = "Sets the Modbus slave ID.", Inherited = true)]
-        public byte SlaveID { get; }
-
-        [Range(0, Int32.MaxValue)]
-        public int ReceiveTimeout { get; }
-
-        [Range(0, Int32.MaxValue)]
-        public int SendTimeout { get; }
+        private readonly JsonSerializerOptions _jsonoptions = JsonExtensions.DefaultSerializerOptions;
 
         #endregion
 
@@ -79,84 +42,82 @@ namespace ModbusApp.Commands
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TcpCommand"/> class.
-        /// Selected properties are initialized with data from the AppSettings instance.
-        /// <summary>
-        /// <param name="client"></param>
-        /// <param name="console"></param>
-        /// <param name="settings"></param>
-        /// <param name="config"></param>
-        /// <param name="environment"></param>
-        /// <param name="lifetime"></param>
-        /// <param name="logger"></param>
-        /// <param name="application"></param>
-        public TcpCommand(ITcpModbusClient client,
-                          IConsole console,
-                          AppSettings settings,
-                          IConfiguration config,
-                          IHostEnvironment environment,
-                          IHostApplicationLifetime lifetime,
-                          ILogger<TcpCommand> logger,
-                          CommandLineApplication application)
-            : base(console, settings, config, environment, lifetime, logger, application)
-        {
-            ReceiveTimeout = _settings.TcpMaster.ReceiveTimeout;
-            SendTimeout = _settings.TcpMaster.SendTimeout;
-            Address = _settings.TcpSlave.Address;
-            Port = _settings.TcpSlave.Port;
-            SlaveID = _settings.TcpSlave.ID;
-
-            // Setting the TCP client instance.
-            _client = client;
-        }
-
-        #endregion
-
-        #region Public Methods
-
-        /// <summary>
-        /// Runs when the commandline application command is executed.
         /// </summary>
-        /// <returns>The exit code</returns>
-        public int OnExecute()
+        /// <param name="client"></param>
+        /// <param name="tcpReadCommand"></param>
+        /// <param name="tcpWriteCommand"></param>
+        /// <param name="tcpMonitorCommand"></param>
+        /// <param name="settings"></param>
+        /// <param name="logger"></param>
+        public TcpCommand(ITcpModbusClient client,
+                          TcpReadCommand tcpReadCommand,
+                          TcpWriteCommand tcpWriteCommand,
+                          TcpMonitorCommand tcpMonitorCommand,
+                          AppSettings settings,
+                          ILogger<TcpCommand> logger)
+            : base("tcp", "Subcommand supporting standard Modbus TCP operations.")
         {
-            try
-            {
-                // Overriding TCP client options.
-                _client.TcpMaster.ReceiveTimeout = ReceiveTimeout;
-                _client.TcpMaster.SendTimeout = SendTimeout;
-                _client.TcpSlave.Address = Address;
-                _client.TcpSlave.Port = Port;
-                _client.TcpSlave.ID = SlaveID;
+            // Setup command options.
+            AddGlobalOption(new Option<string>("--address", "Sets the Modbus slave IP address").Name("Address").Default(settings.TcpSlave.Address).IPAddress());
+            AddGlobalOption(new Option<int>("--port", "Sets the Modbus slave IP port").Name("Port").Default(settings.TcpSlave.Port).Range(0, 65535));
+            AddGlobalOption(new Option<byte>("--slaveid", "Sets the Modbus slave ID").Name("SlaveID").Default(settings.TcpSlave.ID));
+            AddGlobalOption(new Option<int>("--receive-timeout", "Sets the receive timeout").Name("ReceiveTimeout").Default(settings.TcpMaster.ReceiveTimeout).Range(0, Int32.MaxValue).Hide());
+            AddGlobalOption(new Option<int>("--send-timeout", "Sets the send timeout").Name("SendTimeout").Default(settings.TcpMaster.SendTimeout).Range(0, Int32.MaxValue).Hide());
 
-                if (Parent?.ShowSettings ?? false)
+            // Add sub commands.
+            AddCommand(tcpReadCommand);
+            AddCommand(tcpWriteCommand);
+            AddCommand(tcpMonitorCommand);
+
+            // Setup execution handler.
+            Handler = CommandHandler.Create<IConsole, bool, TcpCommandOptions>((console, verbose, options) =>
+            {
+                logger.LogInformation("Handler()");
+
+                // Using TCP client options.
+                client.TcpSlave.Address = options.Address;
+                client.TcpSlave.Port = options.Port;
+                client.TcpSlave.ID = options.SlaveID;
+                client.TcpMaster.ReceiveTimeout = options.ReceiveTimeout;
+                client.TcpMaster.SendTimeout = options.SendTimeout;
+
+                if (verbose)
                 {
-                    _console.WriteLine(JsonSerializer.Serialize<TcpMasterData>(_client.TcpMaster, _options));
-                    _console.WriteLine(JsonSerializer.Serialize<TcpSlaveData>(_client.TcpSlave, _options));
+                    console.Out.WriteLine($"Modbus Commandline Application: {RootCommand.ExecutableName}");
+                    console.Out.WriteLine();
+                    console.Out.Write("TcpMasterData: ");
+                    console.Out.WriteLine(JsonSerializer.Serialize<TcpMasterData>(client.TcpMaster, _jsonoptions));
+                    console.Out.Write("TcpSlaveData: ");
+                    console.Out.WriteLine(JsonSerializer.Serialize<TcpSlaveData>(client.TcpSlave, _jsonoptions));
+                    console.Out.WriteLine();
                 }
 
-                if (_client.Connect())
+                try
                 {
-                    _console.WriteLine($"Modbus TCP slave found at {Address}:{Port}.");
-                    return ExitCodes.SuccessfullyCompleted;
+                    if (client.Connect())
+                    {
+                        console.Out.WriteLine($"Modbus TCP slave found at {options.Address}:{options.Port}.");
+                        return ExitCodes.SuccessfullyCompleted;
+                    }
+                    else
+                    {
+                        console.Out.WriteLine($"Modbus TCP slave not found at {options.Address}:{options.Port}.");
+                        return ExitCodes.IncorrectFunction;
+                    }
                 }
-                else
+                catch
                 {
-                    _console.WriteLine($"Modbus TCP slave not found at {Address}:{Port}.");
-                    return ExitCodes.IncorrectFunction;
+                    logger.LogError("TcpCommand exception");
+                    throw;
                 }
-            }
-            catch
-            {
-                _logger.LogError("TcpCommand exception");
-                throw;
-            }
-            finally
-            {
-                if (_client.Connected)
+                finally
                 {
-                    _client.Disconnect();
+                    if (client.Connected)
+                    {
+                        client.Disconnect();
+                    }
                 }
-            }
+            });
         }
 
         #endregion

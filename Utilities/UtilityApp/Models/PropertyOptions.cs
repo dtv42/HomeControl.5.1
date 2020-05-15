@@ -1,11 +1,11 @@
 ﻿// --------------------------------------------------------------------------------------------------------------------
-// <copyright file="ValidateOptions.cs" company="DTV-Online">
+// <copyright file="PropertyOptions.cs" company="DTV-Online">
 //   Copyright(c) 2020 Dr. Peter Trimmel. All rights reserved.
 // </copyright>
 // <license>
 //   Licensed under the MIT license. See the LICENSE file in the project root for more information.
 // </license>
-// <created>8-5-2020 08:36</created>
+// <created>13-5-2020 17:37</created>
 // <author>Peter Trimmel</author>
 // --------------------------------------------------------------------------------------------------------------------
 namespace UtilityApp.Models
