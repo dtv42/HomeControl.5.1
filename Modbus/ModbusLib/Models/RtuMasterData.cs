@@ -14,6 +14,7 @@ namespace ModbusLib.Models
 
     using System;
     using System.ComponentModel.DataAnnotations;
+    using System.IO.Ports;
 
     #endregion
 
@@ -27,10 +28,10 @@ namespace ModbusLib.Models
         public string SerialPort { get; set; } = string.Empty;
         [RegularExpression(@"110|300|600|1200|2400|4800|9600|14400|19200|38400|57600|115200|128000|256000")]
         public int Baudrate { get; set; } = 9600;
-        public System.IO.Ports.Parity Parity { get; set; } = System.IO.Ports.Parity.None;
+        public Parity Parity { get; set; } = Parity.None;
         [Range(5, 8)]
         public int DataBits { get; set; } = 8;
-        public System.IO.Ports.StopBits StopBits { get; set; } = System.IO.Ports.StopBits.One;
+        public StopBits StopBits { get; set; } = StopBits.One;
         [Range(-1, Int32.MaxValue)]
         public int ReadTimeout { get; set; } = -1;
         [Range(-1, Int32.MaxValue)]

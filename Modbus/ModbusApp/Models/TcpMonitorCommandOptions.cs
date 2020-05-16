@@ -14,11 +14,11 @@
         public bool Holding { get; set; }
         public bool Input { get; set; }
         public bool Hex { get; set; }
-        public ushort Number { get; set; } = 1;
-        public ushort Offset { get; set; } = 0;
+        public ushort Number { get; set; }
+        public ushort Offset { get; set; }
         public string Type { get; set; } = string.Empty;
-        public uint Repeat { get; set; } = 0;
-        public uint Seconds { get; set; } = 10;
+        public uint Repeat { get; set; }
+        public uint Seconds { get; set; }
 
         /// <summary>
         ///  Additional check on options.

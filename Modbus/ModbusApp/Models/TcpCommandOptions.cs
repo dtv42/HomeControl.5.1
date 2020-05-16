@@ -1,11 +1,5 @@
 ﻿namespace ModbusApp.Models
 {
-    #region Using Directives
-
-    using System.IO.Ports;
-
-    #endregion
-
     internal class TcpCommandOptions
     {
         public string Address { get; set; } = string.Empty;

@@ -119,13 +119,13 @@ namespace ModbusApp.Commands
                     else
                     {
                         Console.WriteLine($"RTU serial port not found at {options.SerialPort}.");
-                        return ExitCodes.IncorrectFunction;
+                        return ExitCodes.NotSuccessfullyCompleted;
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    logger.LogError("RtuCommand exception");
-                    throw;
+                    console.Out.WriteLine($"Exception: {ex.Message}");
+                    return ExitCodes.UnhandledException;
                 }
                 finally
                 {

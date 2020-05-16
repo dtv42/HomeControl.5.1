@@ -22,6 +22,9 @@ namespace ModbusLib
 
     public interface IModbusClient
     {
+        public static ushort MaxBooleanPoints = 2000;
+        public static ushort MaxRegisterPoints = 125;
+
         IModbusMaster? ModbusMaster { get; }
 
         #region Read Functions

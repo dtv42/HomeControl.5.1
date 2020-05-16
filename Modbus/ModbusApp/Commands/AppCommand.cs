@@ -68,8 +68,8 @@ namespace ModbusApp.Commands
             // Add custom validation.
             AddValidator(r =>
             {
-                var optionV = r.Children.Contains("-verbose");
-                var optionC = r.Children.Contains("-config");
+                var optionV = r.Children.Contains("verbose");
+                var optionC = r.Children.Contains("config");
 
                 if (!optionC && !optionV)
                 {

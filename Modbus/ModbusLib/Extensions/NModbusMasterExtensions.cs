@@ -969,7 +969,7 @@ namespace NModbus.Extensions
         }
 
         /// <summary>
-        /// Asynchronously reads a single boolean value.
+        /// Asynchronously reads a single boolean value (stored in a single register).
         /// </summary>
         /// <param name="master">The modbus master instance.</param>
         /// <param name="slaveAddress">Address of device to read values from.</param>
@@ -977,15 +977,15 @@ namespace NModbus.Extensions
         /// <returns>bool value.</returns>
         public static async Task<bool> ReadBoolAsync(this IModbusMaster master, byte slaveAddress, ushort startAddress)
         {
-            bool[] data = await master.ReadCoilsAsync(slaveAddress, startAddress, 1);
+            ushort[] data = await master.ReadHoldingRegistersAsync(slaveAddress, startAddress, 1);
 
             if (data.Length == 1)
             {
-                return data[0];
+                return !(data[0] == 0);
             }
             else
             {
-                throw new Exception($"ReadBoolAsync: Error in reading coil at {startAddress}.");
+                throw new Exception($"ReadBoolAsync: Error in reading register at {startAddress}.");
             }
         }
 
@@ -1193,17 +1193,25 @@ namespace NModbus.Extensions
         }
 
         /// <summary>
-        /// Asynchronously reads an array of boolean values (multiple coils).
+        /// Asynchronously reads an array of boolean values (multiple registers).
         /// </summary>
         /// <param name="master">The modbus master instance.</param>
         /// <param name="slaveAddress">Address of device to read values from.</param>
         /// <param name="startAddress">Address to begin reading.</param>
         /// <param name="length">Size of array.</param>
         /// <returns>Array of Bool values.</returns>
-        public static async Task<bool[]> ReadBoolArrayAsync(this IModbusMaster master, byte slaveAddress, ushort startAddress, ushort length)
+        public static async Task<bool[]> ReadBoolArrayAsync(this IModbusMaster master, byte slaveAddress, ushort startAddress, ushort length, bool swapBytes = false)
         {
-            bool[] data = await master.ReadCoilsAsync(slaveAddress, startAddress, length);
-            return data;
+            ushort[] data = await master.ReadHoldingRegistersAsync(slaveAddress, startAddress, length);
+            bool[] values = new bool[data.Length];
+
+            for (int i = 0; i < data.Length; i++)
+            {
+                ushort[] slice = new ushort[] { data[i] };
+                values[i] = !(slice.ToUShort(swapBytes) == 0);
+            }
+
+            return values;
         }
 
         /// <summary>

@@ -2,6 +2,7 @@
 {
     #region Using Directives
 
+    using System;
     using System.CommandLine;
     using System.CommandLine.IO;
 
@@ -14,8 +15,8 @@
         public bool Holding { get; set; }
         public bool Input { get; set; }
         public bool Hex { get; set; }
-        public ushort Number { get; set; } = 1;
-        public ushort Offset { get; set; } = 0;
+        public ushort Number { get; set; }
+        public ushort Offset { get; set; }
         public string Type { get; set; } = string.Empty;
 
         /// <summary>
@@ -24,26 +25,20 @@
         /// <returns></returns>
         public void CheckOptions(IConsole console)
         {
-            if ((Coil || Discrete) && Hex)
+            // Ignoring some of the options
+            if (Hex && !string.IsNullOrEmpty(Type) && !Type.Equals("string", StringComparison.InvariantCultureIgnoreCase))
             {
-                console.Out.WriteLine("HEX output option is ignored.");
+                console.Out.WriteLine("HEX output option is ignored (-x can only be used with type 'string').");
             }
 
-            if (Input || Holding)
+            if (Hex && (Coil || Discrete))
             {
-                var message = Type.ToLower() switch
-                {
-                    "bits" => (Number > 1) ? "Only a single bit array value is supported." : null,
-                    "string" => null,
-                    _ => Hex ? "HEX output option is ignored." : null
-                };
-
-                if (!string.IsNullOrEmpty(message)) console.Out.WriteLine(message);
+                console.Out.WriteLine($"HEX output option is ignored (-x can only be used with -h or -i).");
             }
 
             if (!string.IsNullOrEmpty(Type) && (Coil || Discrete))
             {
-                console.Out.WriteLine($"Specified type '{Type}' is ignored.");
+                console.Out.WriteLine($"Specified type '{Type}' is ignored (-t can only be used with -h or -i).");
             }
         }
     }

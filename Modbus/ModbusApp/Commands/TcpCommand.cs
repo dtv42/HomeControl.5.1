@@ -102,13 +102,13 @@ namespace ModbusApp.Commands
                     else
                     {
                         console.Out.WriteLine($"Modbus TCP slave not found at {options.Address}:{options.Port}.");
-                        return ExitCodes.IncorrectFunction;
+                        return ExitCodes.NotSuccessfullyCompleted;
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    logger.LogError("TcpCommand exception");
-                    throw;
+                    console.Out.WriteLine($"Exception: {ex.Message}");
+                    return ExitCodes.UnhandledException;
                 }
                 finally
                 {

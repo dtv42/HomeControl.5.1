@@ -2,7 +2,7 @@
   "profiles": {
     "ModbusApp": {
       "commandName": "Project",
-      "commandLineArgs": "rtu monitor -c"
+      "commandLineArgs": "rtu --stopbits none"
     }
   }
 }
