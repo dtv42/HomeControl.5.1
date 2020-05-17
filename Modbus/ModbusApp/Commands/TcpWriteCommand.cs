@@ -50,7 +50,7 @@ namespace ModbusApp.Commands
             AddOption(new Option<bool>  (new string[] { "-?", "--help"    }, "Show help and usage information"));
             AddOption(new Option<string>(new string[] { "-c", "--coil"    }, "Write coil(s)."                 ).Name("Json"));
             AddOption(new Option<string>(new string[] { "-h", "--holding" }, "Writes holding register(s)."    ).Name("Json"));
-            AddOption(new Option<bool>  (new string[] { "-x", "--hex"     }, "Displays the values in HEX"     ));
+            AddOption(new Option<bool>  (new string[] { "-x", "--hex"     }, "Writes the HEX values (string)" ));
             AddOption(new Option<ushort>(new string[] { "-o", "--offset"  }, "The offset of the first item."  ).Name("Offset").Default((ushort)0));
             AddOption(new Option<string>(new string[] { "-t", "--type"    }, "Reads the specified data type"  ).Name("Type")
                 .FromAmong("bits", "string", "byte", "short", "ushort", "int", "uint", "float", "double", "long", "ulong"));

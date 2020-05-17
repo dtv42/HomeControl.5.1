@@ -148,133 +148,134 @@ All commands have *-?* and *--help* options to display usage information.
 
 ### Root Command
 
-| Option | Description |
-| ------ | ----------- |
-| *--verbose* | Shows the current settings (typically from "appsettings.json") |
+| Option    |                           Description                           |
+| --------- | --------------------------------------------------------------- |
+| --verbose | Shows the current settings (typically from "appsettings.json")  |
+| --config  | Shows the all configuration items (environment, settings, etc.) |
 
-The root command options can also be used in the following sub commands.
+The root command option *--verbose* can also be used in all sub commands.
 
-| Command | Description |
-| ------- | ----------- |
-| rtu | Supporting standard Modbus RTU operations |
-| tcp | Supporting standard Modbus RTU operations |
+| Command |                 Description               |
+| ------- | ----------------------------------------- |
+| rtu     | Supporting standard Modbus RTU operations |
+| tcp     | Supporting standard Modbus TCP operations |
 
 ### rtu Command
 
-| Option | Description |
-| ------ | ----------- |
-| --com <string> | Sets the Modbus master COM port |
-| --baudrate <number> | Sets the Modbus COM port baud rate |
-| --parity <string> | Sets the Modbus COM port parity |
-| --databits <number> | Sets the Modbus COM port data bits |
-| --stopbits <string> | Sets the Modbus COM port stop bits |
-| --slaveid <number> | Sets the Modbus slave ID |
+|             Option             |              Description           |
+| ------------------------------ | ---------------------------------- |
+| --com &lt;string&gt;           | Sets the Modbus master COM port    |
+| --baudrate &lt;number&gt;      | Sets the Modbus COM port baud rate |
+| --parity &lt;string&gt;        | Sets the Modbus COM port parity    |
+| --databits &lt;number&gt;      | Sets the Modbus COM port data bits |
+| --stopbits &lt;string&gt;      | Sets the Modbus COM port stop bits |
+| --slaveid &lt;number&gt;       | Sets the Modbus slave ID           |
+| --read-timeout &lt;number&gt;  | Sets the timeout in msec (hidden)  |
+| --write-timeout &lt;number&gt; | Sets the timeout in msec (hidden)  |
 
 The *rtu* command options can also be used in the following sub commands.
 
-| Command | Description |
-| ------- | ----------- |
-| read | Supporting standard Modbus RTU operations |
-| write | Supporting standard Modbus RTU operations |
-| monitor | Supporting standard Modbus RTU operations |
+| Command |                   Description                     |
+| ------- | ------------------------------------------------- |
+| read    | Supporting standard Modbus RTU read operations    |
+| write   | Supporting standard Modbus RTU write operations   |
+| monitor | Supporting standard Modbus RTU monitor operations |
 
 #### read Command
 
-| Option | | Description |
-| ------ |-| ----------- |
-| -c | --coil | Reads coil(s) |
-| -d | --discrete | Reads discrete input(s) |
-| -h | --holding | Reads holding register(s) |
-| -i | --input | Reads input register(s) |
-| -x | --hex | Displays the register values in HEX |
-| -n | --number &lt;number&gt; | The number of items to read |
-| -o | --offset &lt;number&gt; | The offset of the first item to read |
-| -t | --type &lt;string&gt; | Reads the specified data type |
+| Option |                         |              Description             |
+| ------ | ----------------------- | ------------------------------------ |
+| -c     | --coil                  | Reads coil(s)                        |
+| -d     | --discrete              | Reads discrete input(s)              |
+| -h     | --holding               | Reads holding register(s)            |
+| -i     | --input                 | Reads input register(s)              |
+| -x     | --hex                   | Displays the register values in HEX  |
+| -n     | --number &lt;number&gt; | The number of items to read          |
+| -o     | --offset &lt;number&gt; | The offset of the first item to read |
+| -t     | --type &lt;string&gt;   | Reads the specified data type        |
 
 #### write Command
 
-| Argument | Description |
-| -------- | ----------- |
-| First | Data values (JSON array format) |
-
-| Option | | Description |
-| ------ |-| ----------- |
-| -c | --coil | Writes coil(s) |
-| -h | --holding | Writes holding register(s) |
-| -o | --offset &lt;number&gt; | The offset of the first item to write |
-| -t | --type &lt;string&gt; | Writes the specified data type |
+| Option |                         |              Description              |
+| ------ | ----------------------- | ------------------------------------- |
+| -c     | --coil &lt;json&gt;     | Writes coil(s)                        |
+| -h     | --holding &lt;json&gt;  | Writes holding register(s)            |
+| -x     | --hex                   | Writes the HEX values (string)        |
+| -o     | --offset &lt;number&gt; | The offset of the first item to write |
+| -t     | --type &lt;string&gt;   | Writes the specified data type        |
 
 #### monitor Command
 
-| Option | | Description |
-| ------ |-| ----------- |
-| -c | --coil | Reads coil(s) |
-| -d | --discrete | Reads discrete input(s) |
-| -h | --holding | Reads holding register(s) |
-| -i | --input | Reads input register(s) |
-| -x | --hex | Displays the register values in HEX |
-| -n | --number &lt;number&gt; | The number of items to read |
-| -o | --offset &lt;number&gt; | The offset of the first item to read |
-| -t | --type &lt;string&gt; | Reads the specified data type |
-| -r | --repeat <number> | The number of times to read (default: forever) |
+| Option |                            |             Description              |
+| ------ | -------------------------- | ------------------------------------ |
+| -c     | --coil                     | Reads coil(s)                        |
+| -d     | --discrete                 | Reads discrete input(s)              |
+| -h     | --holding                  | Reads holding register(s)            |
+| -i     | --input                    | Reads input register(s)              |
+| -x     | --hex                      | Displays the register values in HEX  |
+| -n     | --number &lt;number&gt;    | The number of items to read          |
+| -o     | --offset &lt;number&gt;    | The offset of the first item to read |
+| -t     | --type &lt;string&gt;      | Reads the specified data type        |
+| -r     | --repeat  &lt;number&gt;   | The number of times to read          |
+| -s     | --seconds  &lt;number>&gt; | The number of seconds between reads  |
 
 The *monitor* command runs for the number of times specified and can be terminated using *Control-C*.
 
 ### tcp Command
 
-| Option | Description |
-| ------ | ----------- |
-| --address <string> | Sets the Modbus slave IP address |
-| --port <number> | Sets the Modbus slave port number |
-| --slaveid <number> | Sets the Modbus slave ID |
+|               Option             |            Description            |
+| -------------------------------- | --------------------------------- |
+| --address &lt;string&gt;         | Sets the Modbus slave IP address  |
+| --port &lt;number&gt;            | Sets the Modbus slave port number |
+| --slaveid &lt;number&gt;         | Sets the Modbus slave ID          |
+| --receive-timeout &lt;number&gt; | Sets the timeout in msec (hidden) |
+| --send-timeout &lt;number&gt;    | Sets the timeout in msec (hidden) |
 
 The *tcp* command options can also be used in the following sub commands.
 
-| Command | Description |
-| ------- | ----------- |
-| read | Supporting standard Modbus RTU operations |
-| write | Supporting standard Modbus RTU operations |
-| monitor | Supporting standard Modbus RTU operations |
+| Command |                 Description                       |
+| ------- | ------------------------------------------------- |
+| read    | Supporting standard Modbus TCP read operations    |
+| write   | Supporting standard Modbus TCP write operations   |
+| monitor | Supporting standard Modbus TCP monitor operations |
 
 #### read Command
 
-| Option | | Description |
-| -------|-| ----------- |
-| -c | --coil | Reads coil(s) |
-| -d | --discrete | Reads discrete input(s) |
-| -h | --holding | Reads holding register(s) |
-| -i | --input | Reads input register(s) |
-| -x | --hex | Displays the register values in HEX |
-| -n | --number &lt;number&gt; | The number of items to read |
-| -o | --offset &lt;number&gt; | The offset of the first item to read |
-| -t | --type &lt;string&gt; | Reads the specified data type |
+| Option |                         |              Description             |
+| ------ | ----------------------- | ------------------------------------ |
+| -c     | --coil                  | Reads coil(s)                        |
+| -d     | --discrete              | Reads discrete input(s)              |
+| -h     | --holding               | Reads holding register(s)            |
+| -i     | --input                 | Reads input register(s)              |
+| -x     | --hex                   | Displays the register values in HEX  |
+| -n     | --number &lt;number&gt; | The number of items to read          |
+| -o     | --offset &lt;number&gt; | The offset of the first item to read |
+| -t     | --type &lt;string&gt;   | Reads the specified data type        |
 
 #### write Command
 
-| Argument | Description |
-| -------- | ----------- |
-| First | Data values (JSON array format) |
-
-| Option | | Description |
-| ------ |-| ----------- |
-| -c | --coil | Writes coil(s) |
-| -h | --holding | Writes holding register(s) |
-| -o | --offset &lt;number&gt; | The offset of the first item to write |
-| -t | --type &lt;string&gt; | Writes the specified data type |
+| Option |                         |              Description              |
+| ------ | ----------------------- | ------------------------------------- |
+| -c     | --coil &lt;json&gt;     | Writes coil(s)                        |
+| -h     | --holding &lt;json&gt;  | Writes holding register(s)            |
+| -x     | --hex                   | Writes the HEX values (string)        |
+| -o     | --offset &lt;number&gt; | The offset of the first item to write |
+| -t     | --type &lt;string&gt;   | Writes the specified data type        |
 
 #### monitor Command
 
-| Option | | Description |
-| ------ |-| ----------- |
-| -c | --coil | Reads coil(s) |
-| -d | --discrete | Reads discrete input(s) |
-| -h | --holding | Reads holding register(s) |
-| -i | --input | Reads input register(s) |
-| -x | --hex | Displays the register values in HEX |
-| -n | --number &lt;number&gt; | The number of items to read |
-| -o | --offset &lt;number&gt; | The offset of the first item to read |
-| -t | --type &lt;string&gt; | Reads the specified data type |
-| -r | --repeat <number> | The number of times to read (default: forever) |
+| Option |                            |             Description              |
+| ------ | -------------------------- | ------------------------------------ |
+| -c     | --coil                     | Reads coil(s)                        |
+| -d     | --discrete                 | Reads discrete input(s)              |
+| -h     | --holding                  | Reads holding register(s)            |
+| -i     | --input                    | Reads input register(s)              |
+| -x     | --hex                      | Displays the register values in HEX  |
+| -n     | --number &lt;number&gt;    | The number of items to read          |
+| -o     | --offset &lt;number&gt;    | The offset of the first item to read |
+| -t     | --type &lt;string&gt;      | Reads the specified data type        |
+| -r     | --repeat  &lt;number&gt;   | The number of times to read          |
+| -s     | --seconds  &lt;number>&gt; | The number of seconds between reads  |
 
 The *monitor* command runs for the number of times specified and can be terminated using *Control-C*.
 
